@@ -34,10 +34,22 @@ function isEmpty(){
 }
 
 
-# func: CreateFiles - creates files in entered or default path with num copies 
-# param: $path
-# param: $num_files
-function CreateFiles() {
+# func: WriteFile - creates files in entered or default path with num copies 
+# param: $path - Path for created file to fill
+function WriteFile() {
+
+if ! [ -f $1 ] ; then		#if file not exist - ERROR
+
+if [ "$LANG" = "uk_UA.UTF-8" ] ; then
+	echo "ПОМИЛКА: файл не існує!" >&2
+elif [[ "$LANG" = "ru_RU.UTF-8" || "$LANG" = "ru_UA.UTF-8" ]] ; then
+	echo "ОШИБКА: файл не существует!" >&2
+else
+	echo "ERROR: file not exist!" >&2
+fi
+
+exit -1
+fi
 
 ################ Date
 echo "Date: " $(date -R) >> $1
@@ -50,19 +62,25 @@ echo "CPU: \"${CPU:13}\"" >> $1
 ################
 
 ################ RAM v1
-RAM="$(grep -m 1 "MemTotal" /proc/meminfo)"
-echo "RAM: ${RAM:17}" >> $1
+#RAM="$(grep -m 1 "MemTotal" /proc/meminfo | awk '{print $2}')"
+#RAM="$(expr $RAM / 1024)"
+#echo "RAM: $RAM MB" >> $1
 
-#RAM v2
-#RAM="$(sudo dmidecode -t memory | grep Size)"
-#echo "RAM: ${RAM:20}" >> $1
+################ RAM v2
+unset RAMarray
+RAMarray=( $(sudo dmidecode -t memory | grep Size | awk '{print $2}') )
+RAM=0
+for i in "${RAMarray[@]}" ;
+do 
+if [[ "$i" -ne "No" ]] ; then
+RAM="$(expr $RAM + $i)"
+fi
+done
+echo "RAM: ${RAM} MB" >> $1
 ################
 
 
 ################ MOTHERBOARD
-#BoardInfo="$(sudo dmidecode -t 2)"
-#Manufact="$(grep $BoardInfo "Manufacturer")"
-#ProductName="$(grep $BoardInfo "Product Name")"
 Manufact="$(sudo dmidecode -t 2 | grep "Manufacturer")"
 ProductName="$(sudo dmidecode -t 2 | grep "Product Name")"
 SN="$(sudo dmidecode -t 2 | grep "Serial Number")"
@@ -87,47 +105,78 @@ echo "Serial System Number: $SN" >> $1
 echo "---- System ----" >> $1
 ################ OS
 Distrib="$(grep "DISTRIB_DESCRIPTION" /etc/*-release)"
-Distrib=${Distrib:20}
+Distrib="${Distrib##*=}"
 
-#if (isEmpty $Distrib) ; then Distrib="Unknow"
-if [ -z "$Distrib" ] ; then
+if (isEmpty $Distrib) ; then
 Distrib="$(grep "PRETTY_NAME" /etc/*-release)"
-Distrib=${Distrib:12}
+Distrib="${Distrib##*=}"
 fi
-if [ -z "$Distrib" ] ; then
+if (isEmpty $Distrib) ; then
 Distrib="Unknow"
 fi
-
-echo "OS Destribution: \"$Distrib\"" >> $1
+echo "OS Destribution: $Distrib" >> $1
 
 Kernel="$(uname -mrs)"
-Kernel=${Kernel:5}
-echo "Kernel version: " >> $1
-echo "Installation date: " >> $1
-echo "Hostname: " >> $1
-echo "Uptime: " >> $1
-echo "Processes running: " >> $1
-echo "User logged in: " >> $1
+Kernel=${Kernel:6}
+if (isEmpty $Kernel) ; then 
+$Kernel="Unknown" 
+fi
+echo "Kernel version: $Kernel" >> $1
+
+InstDate="$(uname -a |tail -1|awk '{print $6, $7, $8, $9, $11}')"
+if (isEmpty $InstDate) ; then 
+$InstDate="Unknown"
+fi
+echo "Installation date: $InstDate" >> $1
+
+host="$(hostname -I | awk '{print $1}')"
+if (isEmpty $host) ; then 
+$host="Unknown"
+fi
+echo "Hostname: $host" >> $1
+
+Uptime="$(uptime | awk '{print $3}')"
+Uptime=${Uptime%%,}
+if (isEmpty $Uptime) ; then 
+$Uptime="Unknown"
+fi
+echo "Uptime: $Uptime" >> $1
+
+processes="$(ps aux --no-heading | wc -l)"
+if (isEmpty $processes) ; then 
+$processes="Unknown"
+fi
+echo "Processes running: $processes" >> $1
+
+users="$(uptime | awk '{print $5}')"
+users=${users## }
+if (isEmpty $users) ; then 
+$users="Unknown"
+fi
+echo "User logged in: $users" >> $1
 ################
 
 
 ################ NETWORK
-#cat /sbin/ifconfig
-#ip addr show (ip -d addr)
 echo "---- Network ----" >> $1
-echo "lo: " >> $1
-echo "eth0: " >> $1
+##TODO
+unset ipArray
+unset ifaceArray
+ipArray=( $(ip addr show | grep "inet\b" | awk '{print $2}') )		#get all ip addresses
+ifaceArray=( $(ip addr show | cut -d ' ' -f2 | awk NF) )		#get all interfaces
+
+for (( ip=0, iface=0 ; iface < ${#ifaceArray[*]} || ip < ${#ipArray[*]} ; iface++, ip++ ))
+do
+if (isEmpty ${ipArray[ip]}) ; then
+ipArray[ip]="-/-"
+fi
+echo "${ifaceArray[iface]} ${ipArray[ip]}" >> $1
+done
+
 echo "----\"EOF\"----" >> $1
 ################
 
-#if [ -n $path]		#if path is not NULL
-#delete prev output files
-#create new files
-#else			#if path NULL
-			#create task1.out
-#fi
-
-}
+} #end WriteFile
 
 
 # func: help - prints help in terminal
@@ -176,7 +225,7 @@ exit 0
 shift
 
 re='^[0-9]+$'
-if ! [[ $1 =~ $re && $1 -gt 0 ]];	# check for integer val & var > 0
+if ! [[ $1 =~ $re && $1 -gt 0 && $1 -le 1000 ]];	# check for integer val & var > 0
 then
 
 if [ "$LANG" = "uk_UA.UTF-8" ] ; then
@@ -190,27 +239,30 @@ exit 1
 fi
 
 num_files=$1
-path=$2  	#here may be a path
-if [ -z "$path" ] ; then 	#if path NULL
-path="task1.out"
-echo "Path not entered. Default file name is $path"
-fi
-
-shift
 ;;
 ############# num & path
 
-############# default (another)
 *)
-if [ "$LANG" = "uk_UA.UTF-8" ] ; then
-	echo "ПОМИЛКА: не корректні параметри!" >&2
-elif [[ "$LANG" = "ru_RU.UTF-8" || "$LANG" = "ru_UA.UTF-8" ]] ; then
-	echo "ОШИБКА: не корректные параметры!" >&2
-else
-	echo "ERROR: incorrect parameters!" >&2
+path=$1  					#here may be a path
+echo $path
+if [ -z "$path" ] ; then 			#if path NULL
+path="bash/task1.out"
+cd ~						#go home folder
+shift
 fi
-exit 2
 ;;
+
+############# default (another) *)
+#if [ "$LANG" = "uk_UA.UTF-8" ] ; then
+#	echo "ПОМИЛКА: не корректні параметри!" >&2
+#elif [[ "$LANG" = "ru_RU.UTF-8" || "$LANG" = "ru_UA.UTF-8" ]] ; then
+#	echo "ОШИБКА: не корректные параметры!" >&2
+#else
+#	echo "ERROR: incorrect parameters!" >&2
+#fi
+#exit 2
+#;;
+
 ############# default (another)
 
 esac	#end case
@@ -221,12 +273,14 @@ done	#end while
 #############################################################################
 
 
-#rm -rf mydir		#delete all files in directory
-#rm file*		#delete all files with beginning "file"
-#rm file[1-8]		#delete files with endian file1...file8
+if (isEmpty $path) ; then
+path="bash/task1.out"				#default path
+cd ~						#go home folder
+fi
 
-dir_path=$(dirname $path)		#creating folders
-if ! mkdir -p $dir_path ; then
+dir_path=$(dirname $path)
+
+if ! mkdir -p $dir_path ; then			#creating folders if it not exist
 
 if [ "$LANG" = "uk_UA.UTF-8" ] ; then
 	echo "ПОМИЛКА: не вдалося створити папку!" >&2
@@ -239,34 +293,32 @@ fi
 exit 3
 fi
 
-filename="${path%.*}"
-extension="${path##*.}"
+filename="${path##*/}"
+filename="${filename%.*}"		#get file name
+extension="${path##*.}"			#get file extension
 
-n="0000"
-if [ -f "$path" ] ; then
-#rm $path
+n=$(printf "%04d" 0)
+
 cd $dir_path
 oldname="$filename.$extension"
-#newname="$filename-$(date +%Y%m%d)-$n.$extension"
-flag=1
-while (( $flag ))
+newname=$oldname
+
+while (( 1 ))
 do
-newname="$filename-$(date +%Y%m%d)-$n.$extension"
-echo $newname
-if [ -f "$newname" ] ; then		#if file exist
-n="$n+1"
-echo $n
+if [ -f "$newname" ] ; then			#check if file exist
+	newname="$filename-$(date +%Y%m%d)-$n.$extension"
+	n="$(expr $n + 1)"
+	n=$(printf "%04d" $n)
 else
-mv $oldname $newname 			#rename the file
-echo "file was renamed"
-flag=0
+if [[ "$oldname" != "$newname" ]] ; then #if file not exist yet (oldname == newname, dir is empty)
+		mv $oldname $newname 		#rename the file
+	fi
+	break;
 fi
 done
-cd ..
-fi
 
 
-if ! touch $path ; then		#creating file
+if ! touch $oldname; then			#creating file
 
 if [ "$LANG" = "uk_UA.UTF-8" ] ; then
 	echo "ПОМИЛКА: не вдалося створити файл!" >&2
@@ -279,7 +331,25 @@ fi
 exit 4
 fi
 
-echo "Hello" >> $path
+
+#fill file with sys info
+(WriteFile $oldname)
+
+# delete n files (if entered)
+if ! (isEmpty $num_files) ; then		#if num_file not 0
+FileList=( $(ls) ) 	#get file list
+#"${#FileList[*]}"- #size of array
+del="$(expr ${#FileList[*]} - $num_files)"
+echo "Deleting $del files"
+for (( i=0; i < del ; i++ ))
+do
+#echo $(rm "${FileList[i]}")
+rm "${FileList[i]}"
+#echo "$(${FileList[i]} was deleted)"
+done
+
+fi
+
 
 #if [ -d "$path" ]
 #then
@@ -289,7 +359,27 @@ echo "Hello" >> $path
 #echo "$path is a file"
 #fi
 
+#if [ -n $path]		#if path is not NULL
+#delete prev output files
+#create new files
+#else			#if path NULL
+			#create task1.out
+#fi
+
+
+#rm -rf mydir		#delete all files in directory
+#rm file*		#delete all files with beginning "file"
+#rm file[1-8]		#delete files with endian file1...file8
+#rm $path		#delete one file
+
+#: << 'END'
+
+#END
+
+cd ~
+
 exit 0
+
 
 
 
