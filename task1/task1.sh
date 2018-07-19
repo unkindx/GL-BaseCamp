@@ -336,18 +336,14 @@ fi
 (WriteFile $oldname)
 
 # delete n files (if entered)
-if ! (isEmpty $num_files) ; then		#if num_file not 0
+if ! (isEmpty $num_files) && ($num_files -le ${#FileList[*]}) ; then	#if num_files not 0 && num_files <= sizeof(FileList)
 FileList=( $(ls) ) 	#get file list
-#"${#FileList[*]}"- #size of array
 del="$(expr ${#FileList[*]} - $num_files)"
 echo "Deleting $del files"
 for (( i=0; i < del ; i++ ))
 do
-#echo $(rm "${FileList[i]}")
 rm "${FileList[i]}"
-#echo "$(${FileList[i]} was deleted)"
 done
-
 fi
 
 
