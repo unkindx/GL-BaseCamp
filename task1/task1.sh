@@ -58,7 +58,7 @@ echo "---- Hardware ----" >> $1
 
 ################ CPU
 CPU="$(grep -m 1 "model name" /proc/cpuinfo)"
-echo "CPU: \"${CPU:13}\"" >> $1
+echo "CPU: \"${CPU##*: }\"" >> $1
 ################
 
 ################ RAM v1
@@ -84,9 +84,9 @@ echo "RAM: ${RAM} MB" >> $1
 Manufact="$(sudo dmidecode -t 2 | grep "Manufacturer")"
 ProductName="$(sudo dmidecode -t 2 | grep "Product Name")"
 SN="$(sudo dmidecode -t 2 | grep "Serial Number")"
-Manufact=${Manufact:15}
-ProductName=${ProductName:15}
-SN=${SN:15}
+Manufact="${Manufact##*: }"
+ProductName="${ProductName##*: }"
+SN="${SN##*: }"
 
 if [ -z "$Manufact" ] ; then
 Manufact="Unknown"
@@ -159,19 +159,8 @@ echo "User logged in: $users" >> $1
 
 ################ NETWORK
 echo "---- Network ----" >> $1
-##TODO
-unset ipArray
-unset ifaceArray
-ipArray=( $(ip addr show | grep "inet\b" | awk '{print $2}') )		#get all ip addresses
-ifaceArray=( $(ip addr show | cut -d ' ' -f2 | awk NF) )		#get all interfaces
 
-for (( ip=0, iface=0 ; iface < ${#ifaceArray[*]} || ip < ${#ipArray[*]} ; iface++, ip++ ))
-do
-if (isEmpty ${ipArray[ip]}) ; then
-ipArray[ip]="-/-"
-fi
-echo "${ifaceArray[iface]} ${ipArray[ip]}" >> $1
-done
+echo "$(ip -o -4 a | cut -d " " -f2,7)" >> $1
 
 echo "----\"EOF\"----" >> $1
 ################
@@ -221,7 +210,7 @@ exit 0
 ############# help
 
 ############# num & path
--n) #echo "Found the -n option"
+-n)
 shift
 
 re='^[0-9]+$'
@@ -244,7 +233,6 @@ num_files=$1
 
 *)
 path=$1  					#here may be a path
-echo $path
 if [ -z "$path" ] ; then 			#if path NULL
 path="bash/task1.out"
 cd ~						#go home folder
@@ -336,9 +324,10 @@ fi
 (WriteFile $oldname)
 
 # delete n files (if entered)
-if ! (isEmpty $num_files) && ($num_files -le ${#FileList[*]}) ; then	#if num_files not 0 && num_files <= sizeof(FileList)
 FileList=( $(ls) ) 	#get file list
-del="$(expr ${#FileList[*]} - $num_files)"
+len="${#FileList[*]}"
+if [[ $num_files && $num_files -le $len ]] ; then
+del="$(expr $len - $num_files)"
 echo "Deleting $del files"
 for (( i=0; i < del ; i++ ))
 do
